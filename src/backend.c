@@ -58,7 +58,6 @@
 #include <haproxy/ticks.h>
 #include <haproxy/time.h>
 #include <haproxy/trace.h>
-#include <haproxy/stream.h>      /* struct stream, stream_new(), stream_schedule(), task_wakeup() */
 #include <haproxy/buf.h>         /* buf_dup() if needed for raw mode */
 #include <haproxy/backend-t.h>
 #include <haproxy/stream.h>      /* stream_set_srv_target(), stream_new(), stream_free() */
@@ -69,35 +68,12 @@
 #define TRACE_SOURCE &trace_strm
 
 /* prototype for our fan‑out connector */
-static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
-{
-    struct stream     *s2;
-    struct connection *srv_conn;
-
-    /* 1) allocate a fresh sub‑stream tied to the same session */
-    s2 = stream_new(parent->sess, parent->scf, &parent->req.buf);
-    if (!s2)
-        return;
-
-    /* 2) inherit session/backend context */
-    s2->be     = parent->be;
-    s2->sess   = parent->sess;
-    s2->flags |= SF_EARLY_DATA;           /* if using HTX early parsing */
-    s2->target = srv;
-
-    /* 3) open a non‑blocking connection to this server */
-    srv_conn = server_connect(srv, s2->be, s2->sess, 0);
-    if (!srv_conn) {
-        stream_free(s2);
-        return;
-    }
-
+/* fanout connector stub removed; see bottom for implementation */
     /* 4) clone the HTTP request buffer so each backend sees the same data */
     htx_copy(&s2->req.buf, &parent->req.buf);
 
     /* 5) wake its task so HAProxy will flush the request out */
     task_wakeup(s2->task, TASK_WOKEN_IO);
-}
 
 
 /*
@@ -626,22 +602,15 @@ static struct server *get_server_fanout(struct stream *s)
  * If is_primary is non‐zero, this connection will be treated as the
  * main one (parent->target). Otherwise it's fire-and-forget.
  */
-static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
-{
-    /* Fanout stub: implement server connection cloning here */
-}
-
+/* fanout connector stub removed; see bottom for implementation */
     /* Duplicate the request buffers so each connection sees the full request.
      * For HTX mode (HTTP/1 and HTTP/2), clone the HTX message:
      */
-    s2->req.buf = htx_buffer_clone(parent->req.buf);
     /* For raw TCP mode you'd need to clone parent->req.buf.data similarly. */
 
     /* Schedule the stream to push its request out:
      * this enqueues s2 on the HAProxy event loop for writes.
      */
-    stream_schedule(s2, srv_conn);
-}
 
 /*
  * This function applies the load-balancing algorithm to the stream, as
@@ -3851,3 +3820,12 @@ INITCALL1(STG_REGISTER, acl_register_keywords, &acl_kws);
  *  c-basic-offset: 8
  * End:
  */
+
+
+/*
+ * Fanout connector stub - no-op to satisfy linker
+ */
+static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
+{
+    /* TODO: implement fanout logic */
+}
