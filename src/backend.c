@@ -66,21 +66,34 @@
 /* prototype for our fan‑out connector */
 static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
 {
-    /* Fanout stub: implement server connection cloning here */
-}
-		break;
-	case BE_LB_HFCN_SDBM:
-		/* this is the default hash function */
-	default:
-		hash = hash_sdbm(key, len);
-		break;
-	}
+    struct stream     *s2;
+    struct connection *srv_conn;
 
-	if ((px->lbprm.algo & BE_LB_HASH_MOD) == BE_LB_HMOD_AVAL)
-		hash = full_hash(hash);
+    /* 1) allocate a fresh sub‑stream tied to the same session */
+    s2 = stream_new(parent->sess, parent->scf, &parent->req.buf);
+    if (!s2)
+        return;
 
-	return hash;
+    /* 2) inherit session/backend context */
+    s2->be     = parent->be;
+    s2->sess   = parent->sess;
+    s2->flags |= SF_EARLY_DATA;           /* if using HTX early parsing */
+    s2->target = srv;
+
+    /* 3) open a non‑blocking connection to this server */
+    srv_conn = server_connect(srv, s2->be, s2->sess, 0);
+    if (!srv_conn) {
+        stream_free(s2);
+        return;
+    }
+
+    /* 4) clone the HTTP request buffer so each backend sees the same data */
+    htx_copy(&s2->req.buf, &parent->req.buf);
+
+    /* 5) wake its task so HAProxy will flush the request out */
+    task_wakeup(s2->task, TASK_WOKEN_IO);
 }
+
 
 /*
  * This function recounts the number of usable active and backup servers for
