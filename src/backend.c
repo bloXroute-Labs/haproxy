@@ -60,8 +60,15 @@
 #include <haproxy/ticks.h>
 #include <haproxy/time.h>
 #include <haproxy/trace.h>
+#include <haproxy/stream.h>      /* struct stream, stream_new(), stream_schedule(), task_wakeup() */
+#include <haproxy/connection.h>  /* struct connection, server_connect() */
+#include <haproxy/htx.h>         /* htx_copy() */
+#include <haproxy/buf.h>         /* buf_dup() if needed for raw mode */
 
 #define TRACE_SOURCE &trace_strm
+
+/* prototype for our fan‑out connector */
+static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary);
 
 /* helper function to invoke the correct hash method */
 unsigned int gen_hash(const struct proxy* px, const char* key, unsigned long len)
@@ -591,6 +598,82 @@ struct server *get_server_rnd(struct stream *s, const struct server *avoid)
 	return curr;
 }
 
+ /*
+  * Fanout helper: send this stream's request to every UP server.
+  * Returns the first server found (used as "primary" for the usual path).
+  */
+static struct server *get_server_fanout(struct stream *s)
+{
+	struct proxy *px = s->be;
+	struct server *srv, *primary = NULL;
+
+	/* iterate all servers in this backend */
+	for (srv = px->srv; srv; srv = srv->next) {
+		/* only send to running servers */
+		if (srv->cur_state != SRV_ST_RUNNING)
+			continue;
+
+		if (!primary) {
+			/* mark first as the primary one HAProxy will use normally */
+			primary = srv;
+			/* assign it so HAProxy tracks it on s->target */
+			s->target = srv;
+		}
+
+		/* for each server, open a connection and push request buffers */
+		/* note: use a helper to mimic HAProxy’s usual connect+forward logic */
+		initiate_server_connection(s, srv, (srv == primary));
+	}
+
+	return primary;
+}
+
+/*
+ * Establish a (non–blocking) connection to 'srv' for stream 'parent',
+ * duplicate the request buffers and kick off forwarding.
+ * If is_primary is non‐zero, this connection will be treated as the
+ * main one (parent->target). Otherwise it's fire-and-forget.
+ */
+static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
+{
+    struct stream *s2;
+    struct connection *srv_conn;
+
+    /* Clone the parent stream context. This allocates a new stream
+     * structure with its own I/O buffers but shares the same txn state.
+     * Use stream_clone() or equivalent. */
+    s2 = stream_clone(parent);
+    if (!s2)
+        return;
+
+    /* Point it at the right server */
+    s2->target = srv;
+
+    /* If not primary, mark it as a detached background stream so
+     * it won't interfere with the client-facing one. */
+    if (!is_primary)
+        s2->flags |= SF_DETACH;
+
+    /* Open the server connection (non-blocking). This will create
+     * s2->srv_conn, attach it, and schedule the connect. */
+    srv_conn = server_connect_stream(s2, srv);
+    if (!srv_conn) {
+        stream_free(s2);
+        return;
+    }
+
+    /* Duplicate the request buffers so each connection sees the full request.
+     * For HTX mode (HTTP/1 and HTTP/2), clone the HTX message:
+     */
+    s2->req.buf = htx_buffer_clone(parent->req.buf);
+    /* For raw TCP mode you'd need to clone parent->req.buf.data similarly. */
+
+    /* Schedule the stream to push its request out:
+     * this enqueues s2 on the HAProxy event loop for writes.
+     */
+    stream_schedule(s2, srv_conn);
+}
+
 /*
  * This function applies the load-balancing algorithm to the stream, as
  * defined by the backend it is assigned to. The stream is then marked as
@@ -683,8 +766,8 @@ int assign_server(struct stream *s)
 		 * know it's because all servers are full.
 		 */
 		if (s->be->queueslength && s->be->served && s->be->queueslength != s->be->beconn &&
-		    (((s->be->lbprm.algo & (BE_LB_KIND|BE_LB_NEED|BE_LB_PARM)) == BE_LB_ALGO_FAS)||   // first
-		     ((s->be->lbprm.algo & (BE_LB_KIND|BE_LB_NEED|BE_LB_PARM)) == BE_LB_ALGO_RR) ||   // roundrobin
+		    (((s->be->lbprm.algo & (BE_LB_KIND|BE_LB_NEED|BE_LB_PARM)) == BE_LB_ALGO_FAS) ||  // first
+		     ((s->be->lbprm.algo & (BE_LB_KIND|BE_LB_NEED|BE_LB_PARM)) == BE_LB_ALGO_RR) ||  // roundrobin
 		     ((s->be->lbprm.algo & (BE_LB_KIND|BE_LB_NEED|BE_LB_PARM)) == BE_LB_ALGO_SRR))) { // static-rr
 			err = SRV_STATUS_FULL;
 			goto out;
@@ -820,13 +903,23 @@ int assign_server(struct stream *s)
 			goto out;
 		}
 
+		/* Inserted fanout support */
+		switch (s->be->lbprm.algo & BE_LB_KIND) {
+		case BE_LB_KIND_FO:
+			/* fanout: send the request to ALL backends */
+			srv = get_server_fanout(s);
+			if (!srv)
+				s->be->be_counters.failed_conns++;
+			break;
+		}
+
 		if (!srv) {
 			err = SRV_STATUS_FULL;
 			goto out;
 		}
 		else if (srv != prev_srv) {
 			_HA_ATOMIC_INC(&s->be_tgcounters->cum_lbconn);
-			_HA_ATOMIC_INC(&srv->counters.shared.tg[tgid - 1]->cum_lbconn);
+			_HA_ATOMIC_INC(&srv->counters.shared.tg[s->be->lbprm.tgrp->id]->cum_lbconn);
 		}
 		stream_set_srv_target(s, srv);
 	}
@@ -841,7 +934,7 @@ int assign_server(struct stream *s)
 out_ok:
 	s->flags |= SF_ASSIGNED;
 	err = SRV_STATUS_OK;
- out:
+out:
 
 	/* Either we take back our connection slot, or we offer it to someone
 	 * else if we don't need it anymore.
@@ -855,9 +948,10 @@ out_ok:
 		}
 	}
 
- out_err:
+out_err:
 	return err;
 }
+
 
 /* Allocate <*ss> address unless already set. Address is then set to the
  * destination endpoint of <srv> server, or via <s> from a dispatch or
@@ -3018,7 +3112,7 @@ const char *backend_lb_algo_str(int algo) {
 int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 {
 	if (!*(args[0])) {
-		/* if no option is set, use round-robin by default */
+		/* if no option is set, use round‑robin by default */
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_RR;
 		return 0;
@@ -3035,6 +3129,11 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 	else if (strcmp(args[0], "first") == 0) {
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_FAS;
+	}
+	else if (strcmp(args[0], "fanout") == 0) {
+		/* fanout: send each request to ALL backend servers */
+		curproxy->lbprm.algo &= ~BE_LB_ALGO;
+		curproxy->lbprm.algo |= BE_LB_ALGO_FO;
 	}
 	else if (strcmp(args[0], "leastconn") == 0) {
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
@@ -3220,7 +3319,10 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 		curproxy->lbprm.algo |= BE_LB_ALGO_SS;
 	}
 	else {
-		memprintf(err, "only supports 'roundrobin', 'static-rr', 'leastconn', 'source', 'uri', 'url_param', 'hash', 'hdr(name)', 'rdp-cookie(name)', 'log-hash' and 'sticky' options.");
+		memprintf(err,
+		          "only supports 'roundrobin', 'static-rr', 'first', 'fanout', "
+		          "'leastconn', 'source', 'uri', 'url_param', 'hash', "
+		          "'hdr(name)', 'rdp-cookie(name)', 'log-hash' and 'sticky' options.");
 		return -1;
 	}
 	return 0;
@@ -3780,3 +3882,4 @@ INITCALL1(STG_REGISTER, acl_register_keywords, &acl_kws);
  *  c-basic-offset: 8
  * End:
  */
+

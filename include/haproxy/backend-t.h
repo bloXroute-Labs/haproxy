@@ -69,7 +69,7 @@
 #define BE_LB_NEED_ADDR 0x00000100  /* only source address needed */
 #define BE_LB_NEED_DATA 0x00000200  /* some payload is needed     */
 #define BE_LB_NEED_HTTP 0x00000400  /* an HTTP request is needed  */
-#define BE_LB_NEED_LOG  0x00000800  /* LOG backend required  */
+#define BE_LB_NEED_LOG  0x00000800  /* LOG backend required       */
 #define BE_LB_NEED      0x0000FF00  /* mask to get/clear dependencies */
 
 /* Algorithm */
@@ -78,26 +78,28 @@
 #define BE_LB_KIND_CB   0x00020000  /* connection-based */
 #define BE_LB_KIND_HI   0x00030000  /* hash of input (see hash inputs above) */
 #define BE_LB_KIND_SA   0x00040000  /* standalone (specific algorithms, cannot be grouped) */
-#define BE_LB_KIND      0x00070000  /* mask to get/clear LB algorithm */
+#define BE_LB_KIND_FO   0x00050000  /* fanout: send to all backend servers */
+#define BE_LB_KIND      0x000F0000  /* mask to get/clear LB algorithm (RR, CB, HI, SA, FO) */
 
 /* All known variants of load balancing algorithms. These can be cleared using
  * the BE_LB_ALGO mask. For a check, using BE_LB_KIND is preferred.
  */
 #define BE_LB_ALGO_NONE (BE_LB_KIND_NONE | BE_LB_NEED_NONE)    /* not defined */
-#define BE_LB_ALGO_RR   (BE_LB_KIND_RR | BE_LB_NEED_NONE)      /* round robin */
-#define BE_LB_ALGO_RND  (BE_LB_KIND_RR | BE_LB_NEED_NONE | BE_LB_RR_RANDOM) /* random value */
-#define BE_LB_ALGO_LC   (BE_LB_KIND_CB | BE_LB_NEED_NONE | BE_LB_CB_LC)    /* least connections */
-#define BE_LB_ALGO_FAS  (BE_LB_KIND_CB | BE_LB_NEED_NONE | BE_LB_CB_FAS)   /* first available server */
-#define BE_LB_ALGO_SS   (BE_LB_KIND_SA | BE_LB_NEED_NONE | BE_LB_SA_SS)    /* sticky */
-#define BE_LB_ALGO_SRR  (BE_LB_KIND_RR | BE_LB_NEED_NONE | BE_LB_RR_STATIC) /* static round robin */
-#define BE_LB_ALGO_SH	(BE_LB_KIND_HI | BE_LB_NEED_ADDR | BE_LB_HASH_SRC) /* hash: source IP */
-#define BE_LB_ALGO_UH	(BE_LB_KIND_HI | BE_LB_NEED_HTTP | BE_LB_HASH_URI) /* hash: HTTP URI  */
-#define BE_LB_ALGO_PH	(BE_LB_KIND_HI | BE_LB_NEED_HTTP | BE_LB_HASH_PRM) /* hash: HTTP URL parameter */
-#define BE_LB_ALGO_HH	(BE_LB_KIND_HI | BE_LB_NEED_HTTP | BE_LB_HASH_HDR) /* hash: HTTP header value  */
-#define BE_LB_ALGO_RCH	(BE_LB_KIND_HI | BE_LB_NEED_DATA | BE_LB_HASH_RDP) /* hash: RDP cookie value   */
-#define BE_LB_ALGO_SMP	(BE_LB_KIND_HI | BE_LB_NEED_DATA | BE_LB_HASH_SMP) /* hash: sample expression  */
-#define BE_LB_ALGO_LH	(BE_LB_KIND_HI | BE_LB_NEED_LOG  | BE_LB_HASH_SMP) /* log hash: sample expression  */
-#define BE_LB_ALGO      (BE_LB_KIND    | BE_LB_NEED      | BE_LB_PARM    ) /* mask to clear algo */
+#define BE_LB_ALGO_RR   (BE_LB_KIND_RR   | BE_LB_NEED_NONE)    /* round robin */
+#define BE_LB_ALGO_RND  (BE_LB_KIND_RR   | BE_LB_NEED_NONE | BE_LB_RR_RANDOM) /* random value */
+#define BE_LB_ALGO_LC   (BE_LB_KIND_CB   | BE_LB_NEED_NONE | BE_LB_CB_LC)    /* least connections */
+#define BE_LB_ALGO_FAS  (BE_LB_KIND_CB   | BE_LB_NEED_NONE | BE_LB_CB_FAS)   /* first available server */
+#define BE_LB_ALGO_SS   (BE_LB_KIND_SA   | BE_LB_NEED_NONE | BE_LB_SA_SS)    /* sticky */
+#define BE_LB_ALGO_SRR  (BE_LB_KIND_RR   | BE_LB_NEED_NONE | BE_LB_RR_STATIC) /* static round robin */
+#define BE_LB_ALGO_SH   (BE_LB_KIND_HI   | BE_LB_NEED_ADDR | BE_LB_HASH_SRC)  /* hash: source IP */
+#define BE_LB_ALGO_UH   (BE_LB_KIND_HI   | BE_LB_NEED_HTTP | BE_LB_HASH_URI)  /* hash: HTTP URI */
+#define BE_LB_ALGO_PH   (BE_LB_KIND_HI   | BE_LB_NEED_HTTP | BE_LB_HASH_PRM)  /* hash: HTTP URL parameter */
+#define BE_LB_ALGO_HH   (BE_LB_KIND_HI   | BE_LB_NEED_HTTP | BE_LB_HASH_HDR)  /* hash: HTTP header value */
+#define BE_LB_ALGO_RCH  (BE_LB_KIND_HI   | BE_LB_NEED_DATA | BE_LB_HASH_RDP)  /* hash: RDP cookie value */
+#define BE_LB_ALGO_SMP  (BE_LB_KIND_HI   | BE_LB_NEED_DATA | BE_LB_HASH_SMP)  /* hash: sample expression */
+#define BE_LB_ALGO_LH   (BE_LB_KIND_HI   | BE_LB_NEED_LOG  | BE_LB_HASH_SMP)  /* log hash: sample expression */
+#define BE_LB_ALGO_FO   (BE_LB_KIND_FO   | BE_LB_NEED_NONE)                  /* fanout */
+#define BE_LB_ALGO      (BE_LB_KIND      | BE_LB_NEED      | BE_LB_PARM)     /* mask to clear algo */
 
 /* Higher bits define how a given criterion is mapped to a server. In fact it
  * designates the LB function by itself. The dynamic algorithms will also have
@@ -107,7 +109,7 @@
 #define BE_LB_LKUP_MAP    0x00100000  /* static map based lookup */
 #define BE_LB_LKUP_RRTREE 0x00200000  /* FWRR tree lookup */
 #define BE_LB_LKUP_LCTREE 0x00300000  /* FWLC tree lookup */
-#define BE_LB_LKUP_CHTREE 0x00400000  /* consistent hash  */
+#define BE_LB_LKUP_CHTREE 0x00400000  /* consistent hash */
 #define BE_LB_LKUP_FSTREE 0x00500000  /* FAS tree lookup */
 #define BE_LB_LKUP        0x00700000  /* mask to get just the LKUP value */
 
@@ -116,7 +118,7 @@
 
 /* hash types */
 #define BE_LB_HASH_MAP    0x00000000 /* map-based hash (default) */
-#define BE_LB_HASH_CONS   0x01000000 /* consistent hashbit to indicate a dynamic algorithm */
+#define BE_LB_HASH_CONS   0x01000000 /* consistent hash */
 #define BE_LB_HASH_TYPE   0x01000000 /* get/clear hash types */
 
 /* additional modifier on top of the hash function (only avalanche right now) */
@@ -128,9 +130,8 @@
 #define BE_LB_HFCN_DJB2   0x04000000  /* djb2 hash */
 #define BE_LB_HFCN_WT6    0x08000000  /* wt6 hash */
 #define BE_LB_HFCN_CRC32  0x0C000000  /* crc32 hash */
-#define BE_LB_HFCN_NONE   0x10000000 /* none - no hash */
-#define BE_LB_HASH_FUNC   0x1C000000 /* get/clear hash function */
-
+#define BE_LB_HFCN_NONE   0x10000000  /* none - no hash */
+#define BE_LB_HASH_FUNC   0x1C000000  /* get/clear hash function */
 
 /* various constants */
 
