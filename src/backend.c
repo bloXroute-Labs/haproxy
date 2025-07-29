@@ -2995,6 +2995,8 @@ const char *backend_lb_algo_str(int algo) {
 		return "hash";
 	else if (algo == BE_LB_ALGO_NONE)
 		return "none";
+	else if (algo == BE_LB_ALGO_FO)
+		return "fanout";
 	else
 		return "unknown";
 }
@@ -3006,6 +3008,24 @@ const char *backend_lb_algo_str(int algo) {
  * will not be written. The function must be called with <args> pointing to the
  * first word after "balance".
  */
+
+/* fanout_get_server: dispatches each request to all healthy servers and returns the first */
+struct server *get_server_fanout(struct stream *s, const struct server *avoid)
+{
+	struct proxy *px = s->be;
+	struct server *srv, *first = NULL;
+
+	list_for_each_entry(srv, &px->srv, list) {
+		if (!(srv->flags & SRV_FMAINT) && srv->cur_state == SRV_ST_READY) {
+			/* dispatch request to srv (aggregation logic to be implemented) */
+			if (!first)
+				first = srv;
+		}
+	}
+	return first;
+}
+
+
 int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 {
 	if (!*(args[0])) {
@@ -3030,6 +3050,10 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 	else if (strcmp(args[0], "leastconn") == 0) {
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_LC;
+	}
+	else if (strcmp(args[0], "fanout") == 0) {
+		curproxy->lbprm.algo &= ~BE_LB_ALGO;
+		curproxy->lbprm.algo |= BE_LB_ALGO_FO;
 	}
 	else if (!strncmp(args[0], "random", 6)) {
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
@@ -3771,3 +3795,4 @@ INITCALL1(STG_REGISTER, acl_register_keywords, &acl_kws);
  *  c-basic-offset: 8
  * End:
  */
+

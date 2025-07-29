@@ -61,6 +61,7 @@
 
 /* BE_LB_SA_* is used with BE_LB_KIND_SA */
 #define BE_LB_SA_SS     0x00000000  /* stick to server as long as it is available */
+#define BE_LB_SA_FO     0x00000001  /* fanout: broadcast each request to all healthy servers */
 
 #define BE_LB_PARM      0x000000FF  /* mask to get/clear the LB param */
 
@@ -89,6 +90,7 @@
 #define BE_LB_ALGO_LC   (BE_LB_KIND_CB | BE_LB_NEED_NONE | BE_LB_CB_LC)    /* least connections */
 #define BE_LB_ALGO_FAS  (BE_LB_KIND_CB | BE_LB_NEED_NONE | BE_LB_CB_FAS)   /* first available server */
 #define BE_LB_ALGO_SS   (BE_LB_KIND_SA | BE_LB_NEED_NONE | BE_LB_SA_SS)    /* sticky */
+#define BE_LB_ALGO_FO   (BE_LB_KIND_SA | BE_LB_NEED_NONE | BE_LB_SA_FO)    /* fanout: broadcast to all */
 #define BE_LB_ALGO_SRR  (BE_LB_KIND_RR | BE_LB_NEED_NONE | BE_LB_RR_STATIC) /* static round robin */
 #define BE_LB_ALGO_SH	(BE_LB_KIND_HI | BE_LB_NEED_ADDR | BE_LB_HASH_SRC) /* hash: source IP */
 #define BE_LB_ALGO_UH	(BE_LB_KIND_HI | BE_LB_NEED_HTTP | BE_LB_HASH_URI) /* hash: HTTP URI  */
