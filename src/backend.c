@@ -617,7 +617,7 @@ static struct server *get_server_fanout(struct stream *s)
 			/* mark first as the primary one HAProxy will use normally */
 			primary = srv;
 			/* assign it so HAProxy tracks it on s->target */
-			s->target = srv;
+			stream_set_srv_target(s, srv);
 		}
 
 		/* for each server, open a connection and push request buffers */
@@ -642,7 +642,7 @@ static void initiate_server_connection(struct stream *parent, struct server *srv
     /* Clone the parent stream context. This allocates a new stream
      * structure with its own I/O buffers but shares the same txn state.
      * Use stream_clone() or equivalent. */
-    s2 = stream_clone(parent);
+    s2 = stream_new(parent->si[1].listener);
     if (!s2)
         return;
 
@@ -652,11 +652,10 @@ static void initiate_server_connection(struct stream *parent, struct server *srv
     /* If not primary, mark it as a detached background stream so
      * it won't interfere with the client-facing one. */
     if (!is_primary)
-        s2->flags |= SF_DETACH;
 
     /* Open the server connection (non-blocking). This will create
      * s2->srv_conn, attach it, and schedule the connect. */
-    srv_conn = server_connect_stream(s2, srv);
+    srv_conn = server_connect(srv, s2->be, s2->sess, 0);
     if (!srv_conn) {
         stream_free(s2);
         return;
@@ -665,13 +664,13 @@ static void initiate_server_connection(struct stream *parent, struct server *srv
     /* Duplicate the request buffers so each connection sees the full request.
      * For HTX mode (HTTP/1 and HTTP/2), clone the HTX message:
      */
-    s2->req.buf = htx_buffer_clone(parent->req.buf);
+    s2->req.buf = htx_copy(&s2->txn->req.msg, &parent->txn->req.msg);
     /* For raw TCP mode you'd need to clone parent->req.buf.data similarly. */
 
     /* Schedule the stream to push its request out:
      * this enqueues s2 on the HAProxy event loop for writes.
      */
-    stream_schedule(s2, srv_conn);
+    task_wakeup(s2->task, TASK_WOKEN_IO);
 }
 
 /*
@@ -909,7 +908,6 @@ int assign_server(struct stream *s)
 			/* fanout: send the request to ALL backends */
 			srv = get_server_fanout(s);
 			if (!srv)
-				s->be->be_counters.failed_conns++;
 			break;
 		}
 
@@ -3882,4 +3880,3 @@ INITCALL1(STG_REGISTER, acl_register_keywords, &acl_kws);
  *  c-basic-offset: 8
  * End:
  */
-
