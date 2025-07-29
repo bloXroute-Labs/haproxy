@@ -82,7 +82,7 @@ unsigned int gen_hash(const struct proxy* px, const char* key, unsigned long len
 		{
 			const char *_key = key;
 
-			hash = read_int64(&_key, _key + len);
+			hash = read_int64(&_key, _key  len);
 		}
 		break;
 	case BE_LB_HFCN_SDBM:
@@ -126,13 +126,13 @@ void recount_servers(struct proxy *px)
 			if (!px->srv_bck &&
 			    !(px->options & PR_O_USE_ALL_BK))
 				px->lbprm.fbck = srv;
-			px->srv_bck++;
+			px->srv_bck;
 			srv->cumulative_weight = px->lbprm.tot_wbck;
-			px->lbprm.tot_wbck += srv->next_eweight;
+			px->lbprm.tot_wbck = srv->next_eweight;
 		} else {
-			px->srv_act++;
+			px->srv_act;
 			srv->cumulative_weight = px->lbprm.tot_wact;
-			px->lbprm.tot_wact += srv->next_eweight;
+			px->lbprm.tot_wact = srv->next_eweight;
 		}
 	}
 }
@@ -182,9 +182,9 @@ struct server *get_server_sh(struct proxy *px, const char *addr, int len, const 
 	if (px->lbprm.tot_used == 1)
 		goto hash_done;
 
-	while ((l + sizeof (int)) <= len) {
+	while ((l  sizeof (int)) <= len) {
 		h ^= ntohl(*(unsigned int *)(&addr[l]));
-		l += sizeof (int);
+		l = sizeof (int);
 	}
 	/* FIXME: why don't we use gen_hash() here as well?
 	 * -> we don't take into account hash function from "hash_type"
@@ -234,13 +234,13 @@ struct server *get_server_uh(struct proxy *px, char *uri, int uri_len, const str
 	while (uri_len--) {
 		c = *end;
 		if (c == '/') {
-			slashes++;
-			if (slashes == px->lbprm.arg_opt3) /* depth+1 */
+			slashes;
+			if (slashes == px->lbprm.arg_opt3) /* depth1 */
 				break;
 		}
 		else if (c == '?' && !(px->lbprm.arg_opt1 & 1)) // "whole"
 			break;
-		end++;
+		end;
 	}
 
 	hash = gen_hash(px, start, (end - start));
@@ -276,7 +276,7 @@ struct server *get_server_ph(struct proxy *px, const char *uri, int uri_len, con
 	if ((p = memchr(uri, '?', uri_len)) == NULL)
 		return NULL;
 
-	p++;
+	p;
 
 	uri_len -= (p - uri);
 	plen = px->lbprm.arg_len;
@@ -290,13 +290,13 @@ struct server *get_server_ph(struct proxy *px, const char *uri, int uri_len, con
 				 * the value after the equal sign, at <p>
 				 * skip the equal symbol
 				 */
-				p += plen + 1;
+				p = plen  1;
 				start = end = p;
-				uri_len -= plen + 1;
+				uri_len -= plen  1;
 
 				while (uri_len && *end != '&') {
 					uri_len--;
-					end++;
+					end;
 				}
 				hash = gen_hash(px, start, (end - start));
 
@@ -310,7 +310,7 @@ struct server *get_server_ph(struct proxy *px, const char *uri, int uri_len, con
 		p = memchr(params, '&', uri_len);
 		if (!p)
 			return NULL;
-		p++;
+		p;
 		uri_len -= (p - params);
 		params = p;
 	}
@@ -356,9 +356,9 @@ struct server *get_server_ph_post(struct stream *s, const struct server *avoid)
 				 * the value after the equal sign, at <p>
 				 * skip the equal symbol
 				 */
-				p += plen + 1;
+				p = plen  1;
 				start = end = p;
-				len -= plen + 1;
+				len -= plen  1;
 
 				while (len && *end != '&') {
 					if (unlikely(!HTTP_IS_TOKEN(*p))) {
@@ -372,7 +372,7 @@ struct server *get_server_ph_post(struct stream *s, const struct server *avoid)
 									      */
 					}
 					len--;
-					end++;
+					end;
 					/* should we break if vlen exceeds limit? */
 				}
 				hash = gen_hash(px, start, (end - start));
@@ -387,7 +387,7 @@ struct server *get_server_ph_post(struct stream *s, const struct server *avoid)
 		p = memchr(params, '&', len);
 		if (!p)
 			return NULL;
-		p++;
+		p;
 		len -= (p - params);
 		params = p;
 	}
@@ -440,7 +440,7 @@ struct server *get_server_hh(struct stream *s, const struct server *avoid)
 		hash = gen_hash(px, p, len);
 	} else {
 		int dohash = 0;
-		p += len;
+		p = len;
 		/* special computation, use only main domain name, not tld/host
 		 * going back from the end of string, start hashing at first
 		 * dot stop at next.
@@ -654,7 +654,7 @@ int assign_server(struct stream *s)
 			    ((s->sess->flags & SESS_FL_PREFER_LAST) ||
 			     (!s->be->max_ka_queue ||
 			      server_has_room(tmpsrv) || (
-			      tmpsrv->queueslength + 1 < s->be->max_ka_queue))) &&
+			      tmpsrv->queueslength  1 < s->be->max_ka_queue))) &&
 			    srv_currently_usable(tmpsrv)) {
 				list_for_each_entry(conn, &pconns->conn_list, sess_el) {
 					if (!(conn->flags & CO_FL_WAIT_XPRT)) {
@@ -921,7 +921,7 @@ static int alloc_dst_address(struct sockaddr_storage **ss,
 				base_port = get_host_port(dst);
 
 				/* Second, assign the outgoing connection's port */
-				base_port += get_host_port(*ss);
+				base_port = get_host_port(*ss);
 				set_host_port(*ss, base_port);
 			}
 		}
@@ -1055,7 +1055,7 @@ int assign_server_and_queue(struct stream *s)
 
 				do {
 					got_it = _HA_ATOMIC_CAS(&srv->served,
-							        &served, served + 1);
+							        &served, served  1);
 				} while (!got_it && served < srv_dynamic_maxconn(srv) &&
 					 __ha_cpu_relax());
 			}
@@ -1269,7 +1269,7 @@ int alloc_bind_address(struct sockaddr_storage **ss,
 			return SRV_STATUS_INTERNAL;
 		}
 
-		sin->sin_addr.s_addr = htonl(inetaddr_host_lim(vptr, vptr + vlen));
+		sin->sin_addr.s_addr = htonl(inetaddr_host_lim(vptr, vptr  vlen));
 		break;
 
 	default:
@@ -1355,7 +1355,7 @@ struct connection *conn_backend_get(int reuse_mode,
 	stop = srv->per_tgrp[tgid - 1].next_takeover;
 	if (stop >= curtg->count)
 		stop %= curtg->count;
-	stop += curtg->base;
+	stop = curtg->base;
 check_tgid:
 	i = stop;
 	do {
@@ -1391,13 +1391,13 @@ check_tgid:
 			}
 		}
 		HA_SPIN_UNLOCK(IDLE_CONNS_LOCK, &idle_conns[i].idle_conns_lock);
-	} while (!found && (i = (i + 1 == curtg->base + curtg->count) ? curtg->base : i + 1) != stop);
+	} while (!found && (i = (i  1 == curtg->base  curtg->count) ? curtg->base : i  1) != stop);
 
 	if (!found && (global.tune.tg_takeover == FULL_THREADGROUP_TAKEOVER ||
 	    (global.tune.tg_takeover == RESTRICTED_THREADGROUP_TAKEOVER &&
 	    srv->flags & (SRV_F_RHTTP | SRV_F_STRICT_MAXCONN)))) {
-		curtgid = curtgid + 1;
-		if (curtgid == global.nbtgroups + 1)
+		curtgid = curtgid  1;
+		if (curtgid == global.nbtgroups  1)
 			curtgid = 1;
 		/* If we haven't looped yet */
 		if (MAX_TGROUPS > 1 && curtgid != tgid) {
@@ -1410,7 +1410,7 @@ check_tgid:
 		conn = NULL;
  done:
 	if (conn) {
-		_HA_ATOMIC_STORE(&srv->per_tgrp[tgid - 1].next_takeover, (i + 1 == tg->base + tg->count) ? tg->base : i + 1);
+		_HA_ATOMIC_STORE(&srv->per_tgrp[tgid - 1].next_takeover, (i  1 == tg->base  tg->count) ? tg->base : i  1);
 
 		srv_use_conn(srv, conn);
 
@@ -1512,8 +1512,8 @@ kill_random_idle_conn(struct server *srv)
 
 	if (srv->curr_idle_conns == 0)
 		return -1;
-	for (i = 0; i < global.nbthread; i++) {
-		curtid = (i + tid) % global.nbthread;
+	for (i = 0; i < global.nbthread; i) {
+		curtid = (i  tid) % global.nbthread;
 
 		if (HA_SPIN_TRYLOCK(IDLE_CONNS_LOCK, &idle_conns[curtid].idle_conns_lock) != 0)
 			continue;
@@ -1684,13 +1684,13 @@ int be_reuse_connection(int64_t hash, struct session *sess,
 		 *
 		 *          SAFE                 AGGR                ALWS
 		 *
-		 *      +-----+-----+        +-----+-----+       +-----+-----+
+		 *      ----------        ----------       ----------
 		 *   req| 1st | 2nd |     req| 1st | 2nd |    req| 1st | 2nd |
-		 *  ----+-----+-----+    ----+-----+-----+   ----+-----+-----+
+		 *  --------------    --------------   --------------
 		 *  safe|  -  |  2  |    safe|  1  |  2  |   safe|  1  |  2  |
-		 *  ----+-----+-----+    ----+-----+-----+   ----+-----+-----+
+		 *  --------------    --------------   --------------
 		 *  idle|  -  |  1  |    idle|  -  |  1  |   idle|  2  |  1  |
-		 *  ----+-----+-----+    ----+-----+-----+   ----+-----+-----+
+		 *  --------------    --------------   --------------
 		 *
 		 * Idle conns are necessarily looked up on the same thread so
 		 * that there is no concurrency issues.
@@ -1866,7 +1866,7 @@ int connect_server(struct stream *s)
 		if (!tokill_conn) {
 			int i;
 
-			for (i = tid; (i = ((i + 1 == global.nbthread) ? 0 : i + 1)) != tid;) {
+			for (i = tid; (i = ((i  1 == global.nbthread) ? 0 : i  1)) != tid;) {
 				// just silence stupid gcc which reports an absurd
 				// out-of-bounds warning for <i> which is always
 				// exactly zero without threads, but it seems to
@@ -1918,7 +1918,7 @@ int connect_server(struct stream *s)
 			while (1) {
 				if (total_conns < srv->maxconn) {
 					if (_HA_ATOMIC_CAS(&srv->curr_total_conns,
-					    &total_conns, total_conns + 1))
+					    &total_conns, total_conns  1))
 						break;
 					__ha_cpu_relax();
 				} else {
@@ -1932,7 +1932,7 @@ int connect_server(struct stream *s)
 					 */
 					if (ret == -1)
 						return SF_ERR_RESOURCE;
-					kill_tries++;
+					kill_tries;
 					/*
 					 * We tried 3 times to kill an idle
 					 * connection, we failed, give up now.
@@ -2767,7 +2767,7 @@ void back_handle_st_cer(struct stream *s)
 		goto end;
 	}
 
-	s->conn_retries++;
+	s->conn_retries;
 	stream_choose_redispatch(s);
 
 	if (must_tar) {
@@ -2931,7 +2931,7 @@ int tcp_persist_rdp_cookie(struct stream *s, struct channel *req, int an_bit)
 	addr = strtoul(smp.data.u.str.area, &p, 10);
 	if (*p != '.')
 		goto no_cookie;
-	p++;
+	p;
 
 	port = ntohs(strtoul(p, &p, 10));
 	if (*p != '.')
@@ -2963,7 +2963,7 @@ int be_downtime(struct proxy *px) {
 	if (px->lbprm.tot_weight && px->be_counters.last_change < ns_to_sec(now_ns))  // ignore negative time
 		return px->down_time;
 
-	return ns_to_sec(now_ns) - px->be_counters.last_change + px->down_time;
+	return ns_to_sec(now_ns) - px->be_counters.last_change  px->down_time;
 }
 
 /*
@@ -3012,17 +3012,22 @@ const char *backend_lb_algo_str(int algo) {
 /* fanout_get_server: dispatches each request to all healthy servers and returns the first */
 struct server *get_server_fanout(struct stream *s, const struct server *avoid)
 {
-	struct proxy *px = s->be;
-	struct server *srv, *first = NULL;
+    struct proxy *px = s->be;
+    struct server *srv, *first = NULL;
 
-	list_for_each_entry(srv, &px->srv, list) {
-		if (!(srv->flags & SRV_FMAINT) && srv->cur_state == SRV_ST_READY) {
-			/* dispatch request to srv (aggregation logic to be implemented) */
-			if (!first)
-				first = srv;
-		}
-	}
-	return first;
+    /* iterate over the linked list of servers */
+    for (srv = px->srv; srv; srv = srv->next) {
+        /* only dispatch to servers that are up and not in maintenance */
+        if (!srv_willbe_usable(srv))
+            continue;
+
+        /* TODO: broadcast the request down to 'srv' here */
+
+        /* record the first one for HAProxy's usual assignment path */
+        if (!first)
+            first = srv;
+    }
+    return first;
 }
 
 
@@ -3060,11 +3065,11 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 		curproxy->lbprm.algo |= BE_LB_ALGO_RND;
 		curproxy->lbprm.arg_opt1 = 2;
 
-		if (*(args[0] + 6) == '(' && *(args[0] + 7) != ')') { /* number of draws */
+		if (*(args[0]  6) == '(' && *(args[0]  7) != ')') { /* number of draws */
 			const char *beg;
 			char *end;
 
-			beg = args[0] + 7;
+			beg = args[0]  7;
 			curproxy->lbprm.arg_opt1 = strtol(beg, &end, 0);
 
 			if (*end != ')') {
@@ -3096,31 +3101,31 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 
 		while (*args[arg]) {
 			if (strcmp(args[arg], "len") == 0) {
-				if (!*args[arg+1] || (atoi(args[arg+1]) <= 0)) {
-					memprintf(err, "%s : '%s' expects a positive integer (got '%s').", args[0], args[arg], args[arg+1]);
+				if (!*args[arg1] || (atoi(args[arg1]) <= 0)) {
+					memprintf(err, "%s : '%s' expects a positive integer (got '%s').", args[0], args[arg], args[arg1]);
 					return -1;
 				}
-				curproxy->lbprm.arg_opt2 = atoi(args[arg+1]);
-				arg += 2;
+				curproxy->lbprm.arg_opt2 = atoi(args[arg1]);
+				arg = 2;
 			}
 			else if (strcmp(args[arg], "depth") == 0) {
-				if (!*args[arg+1] || (atoi(args[arg+1]) <= 0)) {
-					memprintf(err, "%s : '%s' expects a positive integer (got '%s').", args[0], args[arg], args[arg+1]);
+				if (!*args[arg1] || (atoi(args[arg1]) <= 0)) {
+					memprintf(err, "%s : '%s' expects a positive integer (got '%s').", args[0], args[arg], args[arg1]);
 					return -1;
 				}
-				/* hint: we store the position of the ending '/' (depth+1) so
+				/* hint: we store the position of the ending '/' (depth1) so
 				 * that we avoid a comparison while computing the hash.
 				 */
-				curproxy->lbprm.arg_opt3 = atoi(args[arg+1]) + 1;
-				arg += 2;
+				curproxy->lbprm.arg_opt3 = atoi(args[arg1])  1;
+				arg = 2;
 			}
 			else if (strcmp(args[arg], "whole") == 0) {
 				curproxy->lbprm.arg_opt1 |= 1;
-				arg += 1;
+				arg = 1;
 			}
 			else if (strcmp(args[arg], "path-only") == 0) {
 				curproxy->lbprm.arg_opt1 |= 2;
-				arg += 1;
+				arg = 1;
 			}
 			else {
 				memprintf(err, "%s only accepts parameters 'len', 'depth', 'path-only', and 'whole' (got '%s').", args[0], args[arg]);
@@ -3166,7 +3171,7 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 	else if (!strncmp(args[0], "hdr(", 4)) {
 		const char *beg, *end;
 
-		beg = args[0] + 4;
+		beg = args[0]  4;
 		end = strchr(beg, ')');
 
 		if (!end || end == beg) {
@@ -3194,10 +3199,10 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_RCH;
 
-		if ( *(args[0] + 10 ) == '(' ) { /* cookie name */
+		if ( *(args[0]  10 ) == '(' ) { /* cookie name */
 			const char *beg, *end;
 
-			beg = args[0] + 11;
+			beg = args[0]  11;
 			end = strchr(beg, ')');
 
 			if (!end || end == beg) {
@@ -3209,7 +3214,7 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 			curproxy->lbprm.arg_str = my_strndup(beg, end - beg);
 			curproxy->lbprm.arg_len = end - beg;
 		}
-		else if ( *(args[0] + 10 ) == '\0' ) { /* default cookie name 'mstshash' */
+		else if ( *(args[0]  10 ) == '\0' ) { /* default cookie name 'mstshash' */
 			free(curproxy->lbprm.arg_str);
 			curproxy->lbprm.arg_str = strdup("mstshash");
 			curproxy->lbprm.arg_len = strlen(curproxy->lbprm.arg_str);
@@ -3234,6 +3239,10 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_SS;
 	}
+    else if (strcmp(args[0], "fanout") == 0) {
+        curproxy->lbprm.algo &= ~BE_LB_ALGO;
+        curproxy->lbprm.algo |= BE_LB_ALGO_FO;
+    }
 	else {
 		memprintf(err, "only supports 'roundrobin', 'static-rr', 'leastconn', 'source', 'uri', 'url_param', 'hash', 'hdr(name)', 'rdp-cookie(name)', 'log-hash' and 'sticky' options.");
 		return -1;
@@ -3317,8 +3326,8 @@ smp_fetch_connslots(const struct arg *args, struct sample *smp, const char *kw, 
 			return 1;
 		}
 
-		smp->data.u.sint += (iterator->maxconn - iterator->cur_sess)
-		                       +  (iterator->maxqueue - iterator->queueslength);
+		smp->data.u.sint = (iterator->maxconn - iterator->cur_sess)
+		                         (iterator->maxqueue - iterator->queueslength);
 	}
 
 	return 1;
@@ -3488,7 +3497,7 @@ smp_fetch_be_conn_free(const struct arg *args, struct sample *smp, const char *k
 
 		maxconn = srv_dynamic_maxconn(iterator);
 		if (maxconn > iterator->cur_sess)
-			smp->data.u.sint += maxconn - iterator->cur_sess;
+			smp->data.u.sint = maxconn - iterator->cur_sess;
 	}
 
 	return 1;
@@ -3539,7 +3548,7 @@ smp_fetch_avg_queue_size(const struct arg *args, struct sample *smp, const char 
 	nbsrv = be_usable_srv(px);
 
 	if (nbsrv > 0)
-		smp->data.u.sint = (px->totpend + nbsrv - 1) / nbsrv;
+		smp->data.u.sint = (px->totpend  nbsrv - 1) / nbsrv;
 	else
 		smp->data.u.sint = px->totpend * 2;
 
@@ -3624,7 +3633,7 @@ smp_fetch_srv_weight(const struct arg *args, struct sample *smp, const char *kw,
 
 	smp->flags = SMP_F_VOL_TEST;
 	smp->data.type = SMP_T_SINT;
-	smp->data.u.sint = (srv->cur_eweight * px->lbprm.wmult + px->lbprm.wdiv - 1) / px->lbprm.wdiv;
+	smp->data.u.sint = (srv->cur_eweight * px->lbprm.wmult  px->lbprm.wdiv - 1) / px->lbprm.wdiv;
 	return 1;
 }
 
@@ -3725,7 +3734,7 @@ sample_conv_srv_queue(const struct arg *args, struct sample *smp, void *private)
 		px = proxy_find_by_name(smp->data.u.str.area, PR_CAP_BE, 0);
 		if (!px)
 			return 0;
-		smp->data.u.str.area = bksep + 1;
+		smp->data.u.str.area = bksep  1;
 	} else {
 		if (!(smp->px->cap & PR_CAP_BE))
 			return 0;
