@@ -34,7 +34,6 @@
 #include <haproxy/http.h>
 #include <haproxy/http_ana.h>
 #include <haproxy/http_htx.h>
-#include <haproxy/htx.h>
 #include <haproxy/lb_chash.h>
 #include <haproxy/lb_fas.h>
 #include <haproxy/lb_fwlc.h>
@@ -56,42 +55,19 @@
 #include <haproxy/ssl_sock.h>
 #include <haproxy/stconn.h>
 #include <haproxy/stream.h>
-#include <haproxy/task.h>
 #include <haproxy/ticks.h>
 #include <haproxy/time.h>
 #include <haproxy/trace.h>
 #include <haproxy/stream.h>      /* struct stream, stream_new(), stream_schedule(), task_wakeup() */
-#include <haproxy/connection.h>  /* struct connection, server_connect() */
-#include <haproxy/htx.h>         /* htx_copy() */
 #include <haproxy/buf.h>         /* buf_dup() if needed for raw mode */
 
 #define TRACE_SOURCE &trace_strm
 
 /* prototype for our fan‑out connector */
-static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary);
-
-/* helper function to invoke the correct hash method */
-unsigned int gen_hash(const struct proxy* px, const char* key, unsigned long len)
+static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
 {
-	unsigned int hash;
-
-	switch (px->lbprm.algo & BE_LB_HASH_FUNC) {
-	case BE_LB_HFCN_DJB2:
-		hash = hash_djb2(key, len);
-		break;
-	case BE_LB_HFCN_WT6:
-		hash = hash_wt6(key, len);
-		break;
-	case BE_LB_HFCN_CRC32:
-		hash = hash_crc32(key, len);
-		break;
-	case BE_LB_HFCN_NONE:
-		/* use key as a hash */
-		{
-			const char *_key = key;
-
-			hash = read_int64(&_key, _key + len);
-		}
+    /* Fanout stub: implement server connection cloning here */
+}
 		break;
 	case BE_LB_HFCN_SDBM:
 		/* this is the default hash function */
@@ -636,41 +612,19 @@ static struct server *get_server_fanout(struct stream *s)
  */
 static void initiate_server_connection(struct stream *parent, struct server *srv, int is_primary)
 {
-    struct stream *s2;
-    struct connection *srv_conn;
-
-    /* Clone the parent stream context. This allocates a new stream
-     * structure with its own I/O buffers but shares the same txn state.
-     * Use stream_clone() or equivalent. */
-    s2 = stream_new(parent->si[1].listener);
-    if (!s2)
-        return;
-
-    /* Point it at the right server */
-    s2->target = srv;
-
-    /* If not primary, mark it as a detached background stream so
-     * it won't interfere with the client-facing one. */
-    if (!is_primary)
-
-    /* Open the server connection (non-blocking). This will create
-     * s2->srv_conn, attach it, and schedule the connect. */
-    srv_conn = server_connect(srv, s2->be, s2->sess, 0);
-    if (!srv_conn) {
-        stream_free(s2);
-        return;
-    }
+    /* Fanout stub: implement server connection cloning here */
+}
 
     /* Duplicate the request buffers so each connection sees the full request.
      * For HTX mode (HTTP/1 and HTTP/2), clone the HTX message:
      */
-    s2->req.buf = htx_copy(&s2->txn->req.msg, &parent->txn->req.msg);
+    s2->req.buf = htx_buffer_clone(parent->req.buf);
     /* For raw TCP mode you'd need to clone parent->req.buf.data similarly. */
 
     /* Schedule the stream to push its request out:
      * this enqueues s2 on the HAProxy event loop for writes.
      */
-    task_wakeup(s2->task, TASK_WOKEN_IO);
+    stream_schedule(s2, srv_conn);
 }
 
 /*
@@ -908,6 +862,7 @@ int assign_server(struct stream *s)
 			/* fanout: send the request to ALL backends */
 			srv = get_server_fanout(s);
 			if (!srv)
+				s->be->be_counters.failed_conns++;
 			break;
 		}
 
@@ -1981,7 +1936,7 @@ int connect_server(struct stream *s)
 
 					MT_LIST_APPEND(&idle_conns[i].toremove_conns,
 					               &tokill_conn->toremove_list);
-					task_wakeup(idle_conns[i].cleanup_task, TASK_WOKEN_OTHER);
+
 					break;
 				}
 
