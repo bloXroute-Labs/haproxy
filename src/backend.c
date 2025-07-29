@@ -3021,7 +3021,7 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_RR;
 	}
-	else if (!strcmp(args[1], "fanout")) {
+	else if (!strcmp(args[0], "fanout")) {
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
 		curproxy->lbprm.algo |= BE_LB_ALGO_FO;
 	}
