@@ -2975,6 +2975,8 @@ const char *backend_lb_algo_str(int algo) {
 
 	if (algo == BE_LB_ALGO_RR)
 		return "roundrobin";
+	else if (algo == BE_LB_ALGO_FO)   
+		return "fanout";
 	else if (algo == BE_LB_ALGO_SRR)
 		return "static-rr";
 	else if (algo == BE_LB_ALGO_FAS)
