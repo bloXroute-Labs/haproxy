@@ -60,6 +60,11 @@
 #include <haproxy/trace.h>
 #include <haproxy/stream.h>      /* struct stream, stream_new(), stream_schedule(), task_wakeup() */
 #include <haproxy/buf.h>         /* buf_dup() if needed for raw mode */
+#include <haproxy/backend-t.h>
+#include <haproxy/stream.h>      /* stream_set_srv_target(), stream_new(), stream_free() */
+#include <haproxy/connection.h>  /* server_connect() */
+#include <haproxy/htx.h>         /* htx_copy() */
+#include <haproxy/task.h>        /* task_wakeup() */
 
 #define TRACE_SOURCE &trace_strm
 
@@ -602,16 +607,14 @@ static struct server *get_server_fanout(struct stream *s)
 		if (srv->cur_state != SRV_ST_RUNNING)
 			continue;
 
-		if (!primary) {
-			/* mark first as the primary one HAProxy will use normally */
-			primary = srv;
-			/* assign it so HAProxy tracks it on s->target */
-			stream_set_srv_target(s, srv);
-		}
+    if (!primary) {
+        primary = srv;
+        /* properly assign the primary server */
+        stream_set_srv_target(s, primary);
+    }
 
-		/* for each server, open a connection and push request buffers */
-		/* note: use a helper to mimic HAProxy’s usual connect+forward logic */
-		initiate_server_connection(s, srv, (srv == primary));
+    /* fire off this request to every backend */
+    initiate_server_connection(s, srv, srv == primary);
 	}
 
 	return primary;
